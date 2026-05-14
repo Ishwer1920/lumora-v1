@@ -1,0 +1,19 @@
+
+CREATE OR REPLACE FUNCTION public.touch_updated_at()
+RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END $$;
+
+REVOKE EXECUTE ON FUNCTION public.increment_post_view(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.increment_post_view(uuid, text) TO authenticated;
+
+DROP POLICY IF EXISTS post_views_insert_any ON public.post_views;
+CREATE POLICY post_views_insert_auth ON public.post_views
+  FOR INSERT TO authenticated
+  WITH CHECK (viewer_id = auth.uid() OR viewer_id IS NULL);
+
+-- Restrict media bucket listing to owner folder
+DROP POLICY IF EXISTS "media public read" ON storage.objects;
+DO $$ BEGIN
+  CREATE POLICY "media owner list" ON storage.objects FOR SELECT
+    USING (bucket_id = 'media');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
